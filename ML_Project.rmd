@@ -1,0 +1,140 @@
+---
+title: "ML Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(gbm)
+library(randomForest)
+setwd("C:/Users/george.adam.kilgore/Desktop/CourseraDataScience/Machine Learning")
+```
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset).
+
+## Data Information
+The training data for this project are available here:
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available here:
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+## Import Data
+
+```{r cache=TRUE}
+# Data downloaded to local machine
+dataTest <- read.csv("pml-testing.csv", na.strings = c("NA", ""))
+dataTrain <- read.csv("pml-training.csv", na.strings = c("NA", ""))
+
+```
+
+## Data Cleaning and Processing
+
+```{r }
+# Remove columns 1-7 as not good predictors
+testing <- dataTest[, -c(1:7)]
+training <- dataTrain[,-c(1:7)]
+
+# Count the number of NA's in each column
+NAtrain <- colSums(is.na(training))
+NAtest <- colSums(is.na(testing))
+
+# View NAtrain, multiple columns missing 19,216 entries (NAtest is  the same)
+NAtrain
+
+# Count 100 columns of primarily empty entries
+length(NAtrain[NAtrain > 0])
+length(NAtest[NAtest >0])
+
+# Remove the mostly empty columns
+training <- training[,colSums(is.na(training)) == 0]
+testing <- testing[, colSums(is.na(testing))==0]
+```
+
+The training and testing data are now reduced from 160 columns to 53 columns.  Also note that the training data contains the variable of interest 'classe' while the test data contains a column labeled 'problem_id' (which is not a variable of interest for this analysis).
+
+## Data Splitting
+At this point, the testing data will be partitioned into 60% training data and 40% testing data.  The original testing data will be redesignated as validation data.
+
+```{r}
+partition <- createDataPartition(training$classe, p = .60, list = FALSE)
+train <- training[partition,]
+test <- training[-partition,]
+valid <- testing
+```
+
+## Setup Parallel Processing and train control
+The method for establishing paralled processing is courteousy of Len Greski whose article can be found at  <https://github.com/lgreski/datasciencectacontent/blob/master/markdown/pml-randomForestPerformance.md)>.
+
+```{r}
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1) 
+registerDoParallel(cluster)
+
+#Setup the control method and parameters
+fitControl <- trainControl(method = "cv", number = 5, allowParallel = TRUE)
+```
+
+## Model Development
+The first model is a boost model using "gbm".   
+
+```{r results='hide', cache=TRUE}
+modGBM <- train(classe ~ ., data = train, method = "gbm", trControl = fitControl)
+predictGBM <- predict(modGBM, newdata = test)  
+cmGBM <- confusionMatrix(predictGBM, test$classe)
+```
+
+The accuracy of this model is `r cmGBM$overall[1]`.  The out-of-sample error is `r 1-cmGBM$overall[1]`.  We will see if this can be improved with a Random Forest model.
+
+```{r results='hide', cache=TRUE}
+modRF <- train(classe ~ ., data = train, method = "rf", trControl = fitControl)
+predictRF <- predict(modRF, newdata = test)
+cmRF <- confusionMatrix(predictRF, test$classe) 
+```
+
+The accuracy of this model is `r cmRF$overall[1]`.  The out-of-sample error is `r 1-cmRF$overall[1]`.  This is the model selected for making final project predictions.
+
+```{r}
+# Halt cluster for parallel processing
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+## Final Predictions
+The selected Random Forest model is used now to make final predictions on the validation set.
+
+```{r}
+predictVALID <- predict(modRF, valid)
+predictVALID
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
